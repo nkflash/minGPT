@@ -2,13 +2,20 @@
 Simple training loop; Boilerplate that could apply to any arbitrary neural network,
 so nothing in this file really has anything to do with GPT specifically.
 """
-
+import os
 import time
 from collections import defaultdict
 
 import torch
 from torch.utils.data.dataloader import DataLoader
 from mingpt.utils import CfgNode as CN
+
+from torch.utils.data.distributed import DistributedSampler
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+
+
+
 
 class Trainer:
 
@@ -24,8 +31,9 @@ class Trainer:
         C.batch_size = 64
         C.learning_rate = 3e-4
         C.betas = (0.9, 0.95)
-        C.weight_decay = 0.1 # only applied on matmul weights
+        C.weight_decay = 0.1  # only applied on matmul weights
         C.grad_norm_clip = 1.0
+        C.launch_type = 'local'
         return C
 
     def __init__(self, config, model, train_dataset):
@@ -34,6 +42,9 @@ class Trainer:
         self.optimizer = None
         self.train_dataset = train_dataset
         self.callbacks = defaultdict(list)
+        if self.config.launch_type != 'local':
+            self.local_rank = int(os.environ["LOCAL_RANK"])
+            self.global_rank = int(os.environ["RANK"])
 
         # determine the device we'll train on
         if config.device == 'auto':
@@ -42,6 +53,9 @@ class Trainer:
             self.device = config.device
         self.model = self.model.to(self.device)
         print("running on device", self.device)
+
+        if self.config.launch_type == 'ddp':
+            self.model = DDP(self.model, device_ids=[self.local_rank])
 
         # variables that will be assigned to trainer class later for logging and etc
         self.iter_num = 0
@@ -64,10 +78,15 @@ class Trainer:
         # setup the optimizer
         self.optimizer = model.configure_optimizers(config)
 
+        if config.launch_type != 'local':
+            sampler = DistributedSampler(self.train_dataset)
+        else:
+            sampler = torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e10))
+
         # setup the dataloader
         train_loader = DataLoader(
             self.train_dataset,
-            sampler=torch.utils.data.RandomSampler(self.train_dataset, replacement=True, num_samples=int(1e10)),
+            sampler=sampler,
             shuffle=False,
             pin_memory=True,
             batch_size=config.batch_size,
