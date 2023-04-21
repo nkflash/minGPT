@@ -12,6 +12,7 @@ from mingpt.utils import CfgNode as CN
 
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
+from mingpt.model import configure_optimizers
 
 
 
@@ -76,7 +77,7 @@ class Trainer:
         model, config = self.model, self.config
 
         # setup the optimizer
-        self.optimizer = model.configure_optimizers(config)
+        self.optimizer = configure_optimizers(model, config)
 
         if config.launch_type != 'local':
             sampler = DistributedSampler(self.train_dataset)
