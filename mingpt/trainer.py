@@ -49,11 +49,11 @@ class Trainer:
 
         # determine the device we'll train on
         if config.device == 'auto':
-            self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            self.device = 'cuda:' + str(self.local_rank) if torch.cuda.is_available() else 'cpu'
         else:
             self.device = config.device
         self.model = self.model.to(self.device)
-        print("running on device", self.device)
+        print(f'running on device {self.device} global_rank:{self.global_rank} local_rank:{self.local_rank}')
 
         if self.config.launch_type == 'ddp':
             self.model = DDP(self.model, device_ids=[self.local_rank])
