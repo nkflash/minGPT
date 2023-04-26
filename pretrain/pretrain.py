@@ -85,6 +85,10 @@ def main(args):
     train_config.max_iters = args.max_iters
     train_config.num_workers = args.num_workers
     train_config.launch_type = args.launch_type
+    if args.checkpoint_iters is not None:
+        train_config.checkpoint_iters = args.checkpoint_iters
+    if args.start_from_checkpoint:
+        train_config.start_from_checkpoint = True
     #    train_config.device = 'cuda'
     trainer = Trainer(train_config, model, train_dataset)
 
@@ -105,5 +109,8 @@ if __name__ == "__main__":
     parser.add_argument('--model_type', default='gpt-nano', type=str, help='Model type')
     parser.add_argument('--max_iters', default=2000, type=int, help='iters number')
     parser.add_argument('--num_workers', default=0, type=int, help='data load worker count')
+    parser.add_argument('--checkpoint_iters', type=int, help='checkpoint iters number')
+    parser.add_argument('--start_from_checkpoint', action='store_true', default=False,
+                        help='start from checkpoint')
 
     main(parser.parse_args())

@@ -13,7 +13,12 @@ from mingpt.utils import CfgNode as CN
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from mingpt.model import configure_optimizers
-
+from torch.distributed.checkpoint import (
+    FileSystemWriter,
+    save_state_dict,
+    load_state_dict,
+    FileSystemReader,
+)
 
 
 
@@ -35,6 +40,8 @@ class Trainer:
         C.weight_decay = 0.1  # only applied on matmul weights
         C.grad_norm_clip = 1.0
         C.launch_type = 'local'
+        C.checkpoint_iters = None
+        C.start_from_checkpoint = False
         return C
 
     def __init__(self, config, model, train_dataset):
@@ -58,8 +65,19 @@ class Trainer:
         if self.config.launch_type == 'ddp':
             self.model = DDP(self.model, device_ids=[self.local_rank])
 
-        # variables that will be assigned to trainer class later for logging and etc
         self.iter_num = 0
+        self.dir_locate = 'checkpoint/' + str(self.global_rank)
+        if config.start_from_checkpoint:
+            sd = {'module': model.state_dict(), 'iteration': 0}
+            fs_storage_reader = FileSystemReader(self.dir_locate)
+            load_state_dict(
+                state_dict=sd,
+                storage_reader=fs_storage_reader,
+            )
+            print(f'start train from checkpoint, iterator:{sd["iteration"]}')
+            self.iter_num = sd["iteration"]
+            model.load_state_dict(sd["module"])
+        # variables that will be assigned to trainer class later for logging and etc
         self.iter_time = 0.0
         self.iter_dt = 0.0
 
@@ -123,6 +141,15 @@ class Trainer:
             tnow = time.time()
             self.iter_dt = tnow - self.iter_time
             self.iter_time = tnow
+
+            if config.checkpoint_iters is not None and self.iter_num % config.checkpoint_iters == 0:
+                model_state_dict = model.state_dict()
+                sd = {'module': model_state_dict, 'iteration': self.iter_num}
+                fs_storage_writer = FileSystemWriter(self.dir_locate)
+                save_state_dict(
+                    state_dict=sd,
+                    storage_writer=fs_storage_writer,
+                )
 
             # termination conditions
             if config.max_iters is not None and self.iter_num >= config.max_iters:
