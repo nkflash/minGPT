@@ -66,7 +66,7 @@ class Trainer:
             self.model = DDP(self.model, device_ids=[self.local_rank])
 
         self.iter_num = 0
-        self.dir_locate = 'checkpoint/' + str(self.global_rank)
+        self.dir_locate = 'checkpoint'
         if config.start_from_checkpoint:
             sd = {'module': model.state_dict(), 'iteration': 0}
             fs_storage_reader = FileSystemReader(self.dir_locate)
@@ -145,6 +145,7 @@ class Trainer:
             if config.checkpoint_iters is not None and self.iter_num % config.checkpoint_iters == 0:
                 model_state_dict = model.state_dict()
                 sd = {'module': model_state_dict, 'iteration': self.iter_num}
+                print(f'Global rank{self.global_rank} try to dump checkpoint to {self.dir_locate}')
                 fs_storage_writer = FileSystemWriter(self.dir_locate)
                 save_state_dict(
                     state_dict=sd,
